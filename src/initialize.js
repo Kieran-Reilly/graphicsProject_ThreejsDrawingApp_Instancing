@@ -1,15 +1,21 @@
 import {Scene}  from "/node_modules/three/src/scenes/scene.js";
-import {PerspectiveCamera} from '/node_modules/three/src/cameras/PerspectiveCamera.js';
+import {OrthographicCamera} from '/node_modules/three/src/cameras/OrthographicCamera.js';
 import {WebGLRenderer} from '/node_modules/three/src/renderers/WebGLRenderer.js';
 import {DirectionalLight} from '/node_modules/three/src/lights/DirectionalLight.js';
 import {AmbientLight} from '/node_modules/three/src/lights/AmbientLight.js';
 
-export function initialize(cameraPosition, rendererParameters, lightProperties) {
+export function initialize(cameraPosition, rendererParameters, lightProperties, parentElement) {
+    const rect = parentElement.getBoundingClientRect();
+    const left = -rect.width / 2;
+    const right = rect.width / 2;
+    const top = rect.height / 2;
+    const bottom = -rect.height / 2;
+
     const result = {
         scene: new Scene(),
         light: new DirectionalLight(lightProperties.color, lightProperties.intensity),
         ambient: new AmbientLight(0x404040),
-        camera: new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000),
+        camera: new OrthographicCamera(left, right, top, bottom, 0.1, 1000),
         renderer: new WebGLRenderer(rendererParameters)
     }
 
@@ -18,7 +24,9 @@ export function initialize(cameraPosition, rendererParameters, lightProperties) 
     result.light.position.z = lightProperties.z;
 
     result.renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(result.renderer.domElement);
+
+    //appending the canvas to canvas container
+    parentElement.appendChild(result.renderer.domElement);
 
     result.camera.position.z = cameraPosition.z;
 
