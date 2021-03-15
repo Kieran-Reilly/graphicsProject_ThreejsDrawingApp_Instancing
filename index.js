@@ -6,6 +6,8 @@ import {CircleBufferGeometry} from "./node_modules/three/src/geometries/CircleGe
 import {ShaderMaterial} from "./node_modules/three/src/materials/ShaderMaterial.js";
 import {Color} from "./node_modules/three/src/math/Color.js";
 import {InstancedBufferAttribute} from "./node_modules/three/src/core/InstancedBufferAttribute.js";
+import {Uniform} from "./node_modules/three/src/core/Uniform.js";
+import {InstancedMesh} from "./node_modules/three/src/objects/InstancedMesh.js";
 
 //init scene
 const canvasContainer = document.querySelector("#canvas-container");
@@ -17,119 +19,212 @@ const lightProperties = {
     y: 5,
     z: 7.5,
     color: 0xffffff,
-    integrity: -1.0
+    intensity: 1
 }
 const mouseHandler = {
     x: null,
     y: null
 }
-const particles = [];
+const instanceCount = 10000;
+const tickCount = 100;
+let particles = 0;
 let hue = 0;
 
 const sceneObj = initialize(cameraLocation, rendererParameters, lightProperties, canvasContainer);
+// console.log(sceneObj);
 
+//creating base and instanced geometry
+const circleRadius = 15;
+let circleGeometry = new CircleBufferGeometry(circleRadius, 32);
+let instancedGeometry = new InstancedBufferGeometry();
+
+//copying attributes into instancedGeometry
+Object.keys(circleGeometry.attributes).forEach(attributeName => {
+    instancedGeometry.attributes[attributeName] = circleGeometry.attributes[attributeName]
+})
+instancedGeometry.index = circleGeometry.index;
+instancedGeometry.maxInstancedCount = instanceCount;
+
+// //setting colours
+// let colours = [];
+// for (let i = 0; i < 100; i++) {
+//     //how we control the colours of the circle
+//     const aColour = new Color(`hsl(${hue}, 100%, 50%)`);
+//
+//     colours.push(aColour.r) //R
+//     colours.push(aColour.g) //G
+//     colours.push(aColour.b) //B
+// }
+// instancedGeometry.setAttribute(
+//     "colours",
+//     new InstancedBufferAttribute(new Float32Array(colours), 3, true)
+// );
+
+//setting properties x, y, scale, speedX, speedY
+// let particlePositions = [];
+// let particleProperties = [];
+// for (let i = 0; i < tickCount; i++) {
+//     const x = mouseHandler.x;
+//     const y = mouseHandler.y;
+//     const scale = Math.random();
+//     const speedX = Math.random() * (2 - -2) + -2;
+//     const speedY = Math.random() * (2 - -2) + -2;
+//
+//     particlePositions.push(x, y);
+//     particleProperties.push(scale, speedX, speedY);
+// }
+// instancedGeometry.setAttribute(
+//     "particlePositions",
+//     new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true)
+// );
+//
+// instancedGeometry.setAttribute(
+//     "particleProperties",
+//     new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true)
+// );
+
+//defining shaders:
 let fragmentShader = `
-    varying vec3 vColour;
+varying vec3 vColours;
+uniform float u_time;
 
-    void main(){
-        vec3 color = vColour;
-        gl_FragColor = vec4(color, 1.);
-    }
+void main(){
+  vec3 color = vColours;
+  gl_FragColor = vec4(color, 1.);
+}
 `;
 
 let vertexShader = `
-     //defining the attributes
-    attribute vec4 properties;
-    attribute vec3 aColour;
-    varying vec3 vColour;
+#define PI 3.14159265359
 
-    //positioning logic
-    vec3 getPosition(float x, float y) {
-        vec3 pos = vec3(0.);
-        pos.x += properties.speedX;
-        pos.y += properties.speedY;
-        
-        return pos;
-    }
+uniform float u_time;
+
+attribute vec3 colours;
+varying vec3 vColours;
+attribute vec2 particlePositions;
+attribute vec3 particleProperties;
+
+vec3 getParticlePosition(float posX, float posY, float speedX, float speedY, float scale) {
+
+    vec2 pos = vec2(0.);
+    pos.x = posX + (u_time * speedX);
+    pos.y = posY + (u_time * speedY);
+    vec3 particlePos = vec3(pos.x, pos.y, 1.0);
+
+    return particlePos;
+}
+
+float getScaleValue(float scale) {
+    // float scaleVal = mod(scale - u_time * 0.015, 1.1);
     
-    void main() {
-        vec3 transformed = position.xyz;
-        
-        //extract values from attributes
-        float radius = properties.size;
-        float x = properties.posX;
-        float y = properties.posY;
-        
-        vec3 particlePosition = getPosition(x, y);
-        transformed += particlePosition;
-        
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.);
-        vColour = aColour;
-    }
+    float scaleVal = scale - u_time * 0.02 < 0.0 ? 0.0 : scale - u_time * 0.02;
+    return scaleVal;
+}
+
+  void main(){
+    float posX = particlePositions.x;
+    float posY = particlePositions.y;
+    float scale = particleProperties.x;
+    float scaleVal = getScaleValue(scale);
+    float speedX = particleProperties.y;
+    float speedY = particleProperties.z;
+  
+    vec3 scalePosition = position * scaleVal;
+    vec3 transformed = scalePosition.xyz;
+    
+    vec3 particlePosition = getParticlePosition(posX, posY, speedX, speedY, scaleVal);
+    transformed += particlePosition;
+    
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.);
+    
+    vColours = colours;
+  }
 `;
 
-
-//creating the base geometry
-let baseGeometry = new CircleBufferGeometry(50, 32);
-
-let instancedGeometry = new InstancedBufferGeometry().copy(baseGeometry);
-let instanceCount = 7000;
-instancedGeometry.maxInstancedCount = instanceCount;
-
-let material = new ShaderMaterial({fragmentShader, vertexShader});
+//defining material
+let uniforms = {
+    u_time: { type: "f", value: 1.0 }
+}
+let material = new ShaderMaterial({fragmentShader, vertexShader, uniforms});
 let mesh = new Mesh(instancedGeometry, material);
 sceneObj.scene.add(mesh);
 
-//CREATING INSTANCED BUFFER ATTRIBUTES
-//1. Create the values for each instance
-let aColour = [];
-let properties = []
-// let colours = [new Color("#ff3030"), new Color("#121214")];
-
-for (let i = 0; i < instanceCount; i++) {
-    let posX = 0;
-    let posY = 0;
-    let size = Math.random() * 200 + 50;
-    let speedX = Math.random() * 3 - 1.5;
-    let speedY = Math.random() * 3 - 1.5;
-    properties.push(posX, posY, size, speedX, speedY);
-
-    hue++;
-    aColour.push(new Color('hsl(' + hue + ', 100%, 50%)'));
-}
-
-//2. Transform the array to float32
-let properties32 = new Float32Array(properties);
-let aColourFloat32 = new Float32Array(aColour);
-
-//3. Create the instanced Buffer Attribute
-instancedGeometry.setAttribute("properties", new InstancedBufferAttribute(properties32, 5, false));
-instancedGeometry.setAttribute("aColour", new InstancedBufferAttribute(aColourFloat32, 3, false));
-
-
 // mouse click event
 sceneObj.renderer.domElement.addEventListener('click', async function (event) {
-    mouseHandler.x = event.x;
-    mouseHandler.y = event.y;
+    mouseHandler.x = event.x < sceneObj.camera.right ? event.x - sceneObj.camera.right : event.x + sceneObj.camera.left;
+    mouseHandler.y = event.y < sceneObj.camera.top ? - event.y + sceneObj.camera.top : - event.y - sceneObj.camera.bottom;
 
+    uniforms.u_time.value = 0;
 
-    // for (let i = 0; i < 1; i++) {
-    //     const particle = new Particle(sceneObj, mouseHandler.x, mouseHandler.y, hue++, circleTexture.renderTarget.texture);
-    //     particles.push(particle.addParticle());
-    // }
+    let particlePositions = [];
+    let particleProperties = [];
+    let colours = [];
+    for (let i = 0; i < tickCount; i++) {
+        //setting properties x, y, scale, speedX, speedY
+        const x = mouseHandler.x;
+        const y = mouseHandler.y;
+        // const scale = Math.random();
+        const scale = Math.random();
+        const speedX = Math.random() * (5 - -5) + -5;
+        const speedY = Math.random() * (5 - -5) + -5;
+
+        //setting colours
+        const aColour = new Color(`hsl(${hue}, 100%, 50%)`);
+        colours.push(aColour.r) //R
+        colours.push(aColour.g) //G
+        colours.push(aColour.b) //B
+
+        particlePositions.push(x, y);
+        particleProperties.push(scale, speedX, speedY);
+    }
+    instancedGeometry.setAttribute(
+        "particlePositions",
+        new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true)
+    );
+
+    instancedGeometry.setAttribute(
+        "particleProperties",
+        new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true)
+    );
+
+    instancedGeometry.setAttribute(
+        "colours",
+        new InstancedBufferAttribute(new Float32Array(colours), 3, true)
+    );
 });
 
 // mousemove event
-sceneObj.renderer.domElement.addEventListener('mousemove', async function (event) {
-    mouseHandler.x = event.x;
-    mouseHandler.y = event.y;
-
-
-    // for (let i = 0; i < 10; i++) {
-    //     const particle = new Particle(sceneObj, mouseHandler.x, mouseHandler.y, hue, circleTexture.renderTarget.texture);
-    //     particles.push(particle.addParticle());
-    // }
-});
+// sceneObj.renderer.domElement.addEventListener('mousemove', async function (event) {
+//     mouseHandler.x = event.x < sceneObj.camera.right ? event.x - sceneObj.camera.right : event.x + sceneObj.camera.left;
+//     mouseHandler.y = event.y < sceneObj.camera.top ? - event.y + sceneObj.camera.top : - event.y - sceneObj.camera.bottom;
+//
+//     uniforms.u_time.value = 0;
+//
+//     //setting properties x, y
+//     let particlePositions = [];
+//     let particleProperties = [];
+//     for (let i = 0; i < instanceCount; i++) {
+//         const x = mouseHandler.x;
+//         const y = mouseHandler.y;
+//         const scale = Math.random();
+//         const speedX = Math.random() * (5 - -5) + -5;
+//         const speedY = Math.random() * (5 - -5) + -5;
+//
+//         particlePositions.push(x, y);
+//         particleProperties.push(scale, speedX, speedY);
+//     }
+//     instancedGeometry.setAttribute(
+//         "particlePositions",
+//         new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true)
+//     );
+//
+//     instancedGeometry.setAttribute(
+//         "particleProperties",
+//         new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true)
+//     );
+//
+//     sceneObj.scene.add(mesh);
+// });
 
 async function particlesHandler() {
 
@@ -147,8 +242,8 @@ async function particlesHandler() {
 
 const animate = () => {
     requestAnimationFrame(animate);
-    // particlesHandler();
-    // hue++;
+    uniforms.u_time.value += 1.0;
+    hue++;
     sceneObj.renderer.render(sceneObj.scene, sceneObj.camera);
 }
 

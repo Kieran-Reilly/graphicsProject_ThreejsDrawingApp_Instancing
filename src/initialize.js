@@ -24,6 +24,7 @@ export function initialize(cameraPosition, rendererParameters, lightProperties, 
     result.light.position.z = lightProperties.z;
 
     result.renderer.setSize(window.innerWidth, window.innerHeight);
+    result.renderer.setPixelRatio(Math.max(1.5, window.devicePixelRatio));
 
     //appending the canvas to canvas container
     parentElement.appendChild(result.renderer.domElement);
