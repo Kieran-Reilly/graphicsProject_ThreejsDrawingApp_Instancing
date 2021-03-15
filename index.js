@@ -102,7 +102,6 @@ attribute vec2 particlePositions;
 attribute vec3 particleProperties;
 
 vec3 getParticlePosition(float posX, float posY, float speedX, float speedY, float scale) {
-
     vec2 pos = vec2(0.);
     pos.x = posX + (u_time * speedX);
     pos.y = posY + (u_time * speedY);
@@ -110,10 +109,7 @@ vec3 getParticlePosition(float posX, float posY, float speedX, float speedY, flo
 
     return particlePos;
 }
-
 float getScaleValue(float scale) {
-    // float scaleVal = mod(scale - u_time * 0.015, 1.1);
-    
     float scaleVal = scale - u_time * 0.02 < 0.0 ? 0.0 : scale - u_time * 0.02;
     return scaleVal;
 }
