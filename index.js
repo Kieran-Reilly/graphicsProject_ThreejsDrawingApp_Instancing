@@ -25,13 +25,16 @@ const mouseHandler = {
     x: null,
     y: null
 }
-const instanceCount = 500000;
-const tickCount = 100;
-let particles = 0;
-let hue = 0;
-
 const sceneObj = initialize(cameraLocation, rendererParameters, lightProperties, canvasContainer);
 // console.log(sceneObj);
+
+
+const instanceCount = 1000;
+let tickCount = 100;
+let particles = 0;
+let renderIndex = 0;
+let hue = 0;
+
 
 //creating base and instanced geometry
 const circleRadius = 15;
@@ -44,44 +47,18 @@ Object.keys(circleGeometry.attributes).forEach(attributeName => {
 })
 instancedGeometry.index = circleGeometry.index;
 instancedGeometry.maxInstancedCount = instanceCount;
+instancedGeometry.setDrawRange(0, tickCount);
 
-// //setting colours
-// let colours = [];
-// for (let i = 0; i < 100; i++) {
-//     //how we control the colours of the circle
-//     const aColour = new Color(`hsl(${hue}, 100%, 50%)`);
-//
-//     colours.push(aColour.r) //R
-//     colours.push(aColour.g) //G
-//     colours.push(aColour.b) //B
-// }
-// instancedGeometry.setAttribute(
-//     "colours",
-//     new InstancedBufferAttribute(new Float32Array(colours), 3, true)
-// );
+let particlePositions = new Array(instanceCount*2);
+let particleProperties =  new Array(instanceCount*3);
+let colours = new Array(instanceCount*3);
+const particlePositionsAttr = new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true);
+const particlePropertiesAttr =  new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true);
+const coloursAttr = new InstancedBufferAttribute(new Float32Array(colours), 3, true);
 
-//setting properties x, y, scale, speedX, speedY
-// let particlePositions = [];
-// let particleProperties = [];
-// for (let i = 0; i < tickCount; i++) {
-//     const x = mouseHandler.x;
-//     const y = mouseHandler.y;
-//     const scale = Math.random();
-//     const speedX = Math.random() * (2 - -2) + -2;
-//     const speedY = Math.random() * (2 - -2) + -2;
-//
-//     particlePositions.push(x, y);
-//     particleProperties.push(scale, speedX, speedY);
-// }
-// instancedGeometry.setAttribute(
-//     "particlePositions",
-//     new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true)
-// );
-//
-// instancedGeometry.setAttribute(
-//     "particleProperties",
-//     new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true)
-// );
+instancedGeometry.setAttribute("particlePositions", particlePositionsAttr);
+instancedGeometry.setAttribute("particleProperties", particlePropertiesAttr);
+instancedGeometry.setAttribute("colours", coloursAttr);
 
 //defining shaders:
 let fragmentShader = `
@@ -144,100 +121,138 @@ sceneObj.scene.add(mesh);
 
 // mouse click event
 sceneObj.renderer.domElement.addEventListener('click', async function (event) {
-    mouseHandler.x = event.x < sceneObj.camera.right ? event.x - sceneObj.camera.right : event.x + sceneObj.camera.left;
-    mouseHandler.y = event.y < sceneObj.camera.top ? - event.y + sceneObj.camera.top : - event.y - sceneObj.camera.bottom;
+    const particlePositions = mesh.geometry.attributes.particlePositions.array;
+    const particleProperties = mesh.geometry.attributes.particleProperties.array;
+    const colours = mesh.geometry.attributes.colours.array;
 
     uniforms.u_time.value = 0;
 
-    let particlePositions = [];
-    let particleProperties = [];
-    let colours = [];
-    for (let i = 0; i < tickCount; i++) {
-        //setting properties x, y, scale, speedX, speedY
+    //TODO: Look into indexing reference issues
+    particles = tickCount + tickCount >= instanceCount ? 0 : particles;
+    const initialIndex = particles;
+    let particlePositionsIndex = initialIndex * 2;
+    let particlePropertiesIndex = initialIndex * 3;
+    let coloursIndex = initialIndex * 3;
+    tickCount = tickCount + tickCount >= instanceCount ? 100 : tickCount + tickCount;
+
+    mouseHandler.x = event.x < sceneObj.camera.right ? event.x - sceneObj.camera.right : event.x + sceneObj.camera.left;
+    mouseHandler.y = event.y < sceneObj.camera.top ? - event.y + sceneObj.camera.top : - event.y - sceneObj.camera.bottom;
+
+    for (let i = renderIndex; i < instanceCount; i++) {
+        particles += 1;
+        if (particles == tickCount) break;
+
+        // setting properties x, y, scale, speedX, speedY
         const x = mouseHandler.x;
         const y = mouseHandler.y;
+        particlePositions[particlePositionsIndex++] = x;
+        particlePositions[particlePositionsIndex++] = y;
+
         // const scale = Math.random();
         const scale = Math.random();
         const speedX = Math.random() * (5 - -5) + -5;
         const speedY = Math.random() * (5 - -5) + -5;
+        particleProperties[particlePropertiesIndex++] = scale;
+        particleProperties[particlePropertiesIndex++] = speedX;
+        particleProperties[particlePropertiesIndex++] = speedY;
 
         //setting colours
         const aColour = new Color(`hsl(${hue}, 100%, 50%)`);
-        colours.push(aColour.r) //R
-        colours.push(aColour.g) //G
-        colours.push(aColour.b) //B
-
-        particlePositions.push(x, y);
-        particleProperties.push(scale, speedX, speedY);
+        colours[coloursIndex++] = aColour.r;
+        colours[coloursIndex++] = aColour.g;
+        colours[coloursIndex++] = aColour.b;
     }
-    instancedGeometry.setAttribute(
-        "particlePositions",
-        new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true)
-    );
 
-    instancedGeometry.setAttribute(
-        "particleProperties",
-        new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true)
-    );
-
-    instancedGeometry.setAttribute(
-        "colours",
-        new InstancedBufferAttribute(new Float32Array(colours), 3, true)
-    );
+    //TODO: And how to reference the correct offset and count
+    instancedGeometry.setDrawRange(0, tickCount);
+    console.log(initialIndex, particles, particlePositionsIndex, particlePropertiesIndex, coloursIndex);
+    mesh.geometry.attributes.particlePositions.updateRange = {offset: initialIndex, count: particlePositionsIndex};
+    mesh.geometry.attributes.particleProperties.updateRange = {offset: initialIndex, count: particlePropertiesIndex};
+    mesh.geometry.attributes.colours.updateRange = {offset: initialIndex, count: coloursIndex};
+    mesh.material.needsUpdate = true;
+    mesh.geometry.computeBoundingBox();
+    mesh.geometry.computeBoundingSphere();
+    console.log(mesh.geometry);
 });
 
 // mousemove event
 // sceneObj.renderer.domElement.addEventListener('mousemove', async function (event) {
+//     const particlePositions = mesh.geometry.attributes.particlePositions.array;
+//     const particleProperties = mesh.geometry.attributes.particleProperties.array;
+//     const colours = mesh.geometry.attributes.colours.array;
+//
+//     uniforms.u_time.value = 0;
+//     let particlePositionsIndex = 0;
+//     let particlePropertiesIndex = 0;
+//     let coloursIndex = 0;
+//     particles = tickCount + tickCount < instanceCount ? particles : 0;
+//     tickCount = tickCount + tickCount >= instanceCount ? 100 : tickCount + tickCount;
+//
 //     mouseHandler.x = event.x < sceneObj.camera.right ? event.x - sceneObj.camera.right : event.x + sceneObj.camera.left;
 //     mouseHandler.y = event.y < sceneObj.camera.top ? - event.y + sceneObj.camera.top : - event.y - sceneObj.camera.bottom;
 //
-//     uniforms.u_time.value = 0;
+//     for (let i = renderIndex; i < instanceCount; i++) {
+//         particles += 1;
+//         if (particles == tickCount) break;
 //
-//     //setting properties x, y
-//     let particlePositions = [];
-//     let particleProperties = [];
-//     for (let i = 0; i < instanceCount; i++) {
+//         // setting properties x, y, scale, speedX, speedY
 //         const x = mouseHandler.x;
 //         const y = mouseHandler.y;
+//         particlePositions[particlePositionsIndex++] = x;
+//         particlePositions[particlePositionsIndex++] = y;
+//
+//         // const scale = Math.random();
 //         const scale = Math.random();
 //         const speedX = Math.random() * (5 - -5) + -5;
 //         const speedY = Math.random() * (5 - -5) + -5;
+//         particleProperties[particlePropertiesIndex++] = scale;
+//         particleProperties[particlePropertiesIndex++] = speedX;
+//         particleProperties[particlePropertiesIndex++] = speedY;
 //
-//         particlePositions.push(x, y);
-//         particleProperties.push(scale, speedX, speedY);
+//         //setting colours
+//         const aColour = new Color(`hsl(${hue}, 100%, 50%)`);
+//         colours[coloursIndex++] = aColour.r;
+//         colours[coloursIndex++] = aColour.g;
+//         colours[coloursIndex++] = aColour.b;
 //     }
-//     instancedGeometry.setAttribute(
-//         "particlePositions",
-//         new InstancedBufferAttribute(new Float32Array(particlePositions), 2, true)
-//     );
 //
-//     instancedGeometry.setAttribute(
-//         "particleProperties",
-//         new InstancedBufferAttribute(new Float32Array(particleProperties), 3, true)
-//     );
-//
-//     sceneObj.scene.add(mesh);
+//     instancedGeometry.setDrawRange(0, tickCount);
+//     mesh.geometry.attributes.particlePositions.needsUpdate = true;
+//     mesh.geometry.attributes.particleProperties.needsUpdate = true;
+//     mesh.geometry.attributes.colours.needsUpdate = true;
+//     mesh.material.needsUpdate = true;
+//     mesh.geometry.computeBoundingBox();
+//     mesh.geometry.computeBoundingSphere();
+//     console.log(mesh.geometry);
 // });
 
-async function particlesHandler() {
+const preRender = () => {
+    const particlePositions = mesh.geometry.attributes.particlePositions.array;
+    const particleProperties = mesh.geometry.attributes.particleProperties.array;
+    const colours = mesh.geometry.attributes.colours.array;
 
+    for (let i = 0; i < instanceCount; i++) {
+        particlePositions.push(0.0); //x
+        particlePositions.push(0.0); //y
 
-    // for (let i = 0; i < particles.length; i++) {
-    //     particles[i].update();
-    //
-    //     if (particles[i].createdParticle.scale.x <= 0.2) {
-    //         sceneObj.scene.remove(particles[i].createdParticle);
-    //         particles.splice(i, 1);
-    //         i--;
-    //     }
-    // }
+        particleProperties.push(0.0); //scale
+        particleProperties.push(0.0); //speedX
+        particleProperties.push(0.0); //speedY
+
+        colours.push(0.0); //r
+        colours.push(0.0); //g
+        colours.push(0.0); //b
+    }
+
+    mesh.geometry.attributes.particlePositions.needsUpdate = true;
+    mesh.geometry.attributes.particleProperties.needsUpdate = true;
+    mesh.geometry.attributes.colours.needsUpdate = true;
 }
-
 const animate = () => {
     requestAnimationFrame(animate);
     uniforms.u_time.value += 1.0;
     hue++;
     sceneObj.renderer.render(sceneObj.scene, sceneObj.camera);
 }
-
+// preRender();
 animate();
