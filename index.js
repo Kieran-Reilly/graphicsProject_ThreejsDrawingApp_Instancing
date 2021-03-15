@@ -25,7 +25,7 @@ const mouseHandler = {
     x: null,
     y: null
 }
-const instanceCount = 10000;
+const instanceCount = 500000;
 const tickCount = 100;
 let particles = 0;
 let hue = 0;
@@ -86,7 +86,6 @@ instancedGeometry.maxInstancedCount = instanceCount;
 //defining shaders:
 let fragmentShader = `
 varying vec3 vColours;
-uniform float u_time;
 
 void main(){
   vec3 color = vColours;
@@ -95,8 +94,6 @@ void main(){
 `;
 
 let vertexShader = `
-#define PI 3.14159265359
-
 uniform float u_time;
 
 attribute vec3 colours;
